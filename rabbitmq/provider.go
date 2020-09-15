@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	rabbithole "github.com/michaelklishin/rabbit-hole/v2"
 
@@ -80,6 +81,19 @@ func Provider() terraform.ResourceProvider {
 				Optional:    true,
 				DefaultFunc: schema.EnvDefaultFunc("RABBITMQ_CLIENTKEY", ""),
 			},
+			"client_timeout": {
+				Type:        schema.TypeInt,
+				Optional:    true,
+				DefaultFunc: schema.EnvDefaultFunc("RABBITMQ_CLIENT_TIMEOUT", 0),
+				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
+					_, ok := v.(int)
+					if !ok {
+						errors = append(errors, fmt.Errorf("Client timeout must not be a number"))
+					}
+
+					return
+				},
+			},
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
@@ -108,6 +122,7 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 	var cacertFile = d.Get("cacert_file").(string)
 	var clientcertFile = d.Get("clientcert_file").(string)
 	var clientkeyFile = d.Get("clientkey_file").(string)
+	var clientTimeout = d.Get("client_timeout").(int)
 
 	// Configure TLS/SSL:
 	// Ignore self-signed cert warnings
@@ -140,6 +155,9 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 	rmqc, err := rabbithole.NewTLSClient(endpoint, username, password, transport)
 	if err != nil {
 		return nil, err
+	}
+	if clientTimeout > 0 {
+		rmqc.SetTimeout(time.Duration(clientTimeout) * time.Second)
 	}
 
 	return rmqc, nil
